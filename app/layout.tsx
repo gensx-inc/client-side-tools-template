@@ -14,8 +14,11 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "GenSX AI Map",
+  title: "GenSX Map Explorer",
   description: "GenSX Frontend Tool Calling Example",
+  icons: {
+    icon: "/favicon.ico",
+  },
 };
 
 export default function RootLayout({
