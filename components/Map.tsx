@@ -1,6 +1,12 @@
 "use client";
 
-import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
+import {
+  MapContainer,
+  TileLayer,
+  Marker,
+  Popup,
+  Polyline,
+} from "react-leaflet";
 import MarkerClusterGroup from "react-leaflet-markercluster";
 import Image from "next/image";
 import { useRef, useEffect, useMemo } from "react";
@@ -8,7 +14,7 @@ import { useRef, useEffect, useMemo } from "react";
 import "leaflet/dist/leaflet.css";
 import "leaflet-defaulticon-compatibility/dist/leaflet-defaulticon-compatibility.css";
 import "leaflet-defaulticon-compatibility";
-import { MapMarker, MapView } from "@/hooks/useMapTools";
+import { MapMarker, MapView, RouteData } from "@/hooks/useMapTools";
 import L from "leaflet";
 
 // Create cluster icon with count
@@ -55,6 +61,7 @@ interface MapProps {
   ref?: React.RefObject<L.Map | null>;
   markers?: MapMarker[];
   view?: MapView;
+  route?: RouteData | null;
 }
 
 const defaultView = {
@@ -201,7 +208,7 @@ const MarkerPopup = ({ marker }: MarkerPopupProps) => {
 };
 
 const Map = (MapProps: MapProps) => {
-  const { ref, markers, view = defaultView } = MapProps;
+  const { ref, markers, view = defaultView, route } = MapProps;
   const originalPositionRef = useRef<{ center: L.LatLng; zoom: number } | null>(
     null,
   );
@@ -270,6 +277,108 @@ const Map = (MapProps: MapProps) => {
     });
   }, [markers, ref]);
 
+  // Memoize route polyline
+  const memoizedRoute = useMemo(() => {
+    if (!route || !route.geometry || !route.geometry.coordinates) return null;
+
+    // Convert GeoJSON coordinates to Leaflet format [lat, lng]
+    const positions = route.geometry.coordinates
+      .filter((coord: number[]) => coord.length >= 2)
+      .map((coord: number[]): [number, number] => [coord[1], coord[0]]);
+
+    return (
+      <Polyline
+        key={route.id}
+        positions={positions}
+        pathOptions={{
+          color: "#3B82F6",
+          weight: 5,
+          opacity: 0.8,
+        }}
+      />
+    );
+  }, [route]);
+
+  // Create start, waypoint, and end markers for the route
+  const routeMarkers = useMemo(() => {
+    if (!route) return [];
+
+    const startIcon = createMarkerIcon("#10B981");
+    const endIcon = createMarkerIcon("#EF4444");
+    const waypointIcon = createMarkerIcon("#F59E0B");
+
+    const markers = [
+      <Marker
+        key={`${route.id}-start`}
+        position={[route.startLat, route.startLon]}
+        icon={startIcon}
+      >
+        <Popup>
+          <div>
+            <strong>Start</strong>
+            {route.startLabel && (
+              <>
+                <br />
+                <small>{route.startLabel}</small>
+              </>
+            )}
+            <br />
+            {route.distanceText} • {route.durationText}
+            <br />
+            <small>Mode: {route.profile.replace("-", " ")}</small>
+          </div>
+        </Popup>
+      </Marker>,
+      <Marker
+        key={`${route.id}-end`}
+        position={[route.endLat, route.endLon]}
+        icon={endIcon}
+      >
+        <Popup>
+          <div>
+            <strong>Destination</strong>
+            {route.endLabel && (
+              <>
+                <br />
+                <small>{route.endLabel}</small>
+              </>
+            )}
+            <br />
+            {route.directions.length} turn
+            {route.directions.length !== 1 ? "s" : ""}
+          </div>
+        </Popup>
+      </Marker>,
+    ];
+
+    // Add waypoint markers
+    if (route.waypoints && route.waypoints.length > 0) {
+      route.waypoints.forEach((waypoint, index) => {
+        markers.push(
+          <Marker
+            key={`${route.id}-waypoint-${index}`}
+            position={[waypoint.lat, waypoint.lon]}
+            icon={waypointIcon}
+          >
+            <Popup>
+              <div>
+                <strong>Stop {index + 1}</strong>
+                {waypoint.label && (
+                  <>
+                    <br />
+                    <small>{waypoint.label}</small>
+                  </>
+                )}
+              </div>
+            </Popup>
+          </Marker>,
+        );
+      });
+    }
+
+    return markers;
+  }, [route]);
+
   return (
     <MapContainer
       center={[view.latitude, view.longitude]}
@@ -282,6 +391,8 @@ const Map = (MapProps: MapProps) => {
         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
       />
+      {memoizedRoute}
+      {routeMarkers}
       <MarkerClusterGroup
         iconCreateFunction={createClusterIcon}
         chunkedLoading={false}
