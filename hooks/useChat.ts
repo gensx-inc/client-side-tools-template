@@ -106,10 +106,6 @@ export function useChat(
       }
 
       setMessages((prev) => {
-        console.log("setMessages, workflowMessages", {
-          prev,
-          workflowMessages,
-        });
         // Find the last user message to determine where to insert workflow messages
         const lastUserIndex = prev.findLastIndex((msg) => msg.role === "user");
         if (lastUserIndex === -1) return prev;
@@ -122,14 +118,12 @@ export function useChat(
   }, [messagesProgress, execution, status, onToolCall]);
 
   const clear = useCallback(() => {
-    console.log("clear");
     setMessages([]);
     setStatus("completed");
   }, []);
 
   const loadHistory = useCallback(async (threadId: string, userId: string) => {
     if (!threadId || !userId) return;
-    console.log("loadHistory", { threadId, userId });
 
     try {
       const history = await getChatHistory(userId, threadId);
@@ -150,11 +144,7 @@ export function useChat(
         role: "user",
         content: prompt,
       };
-      setMessages((prev) => {
-        const newMessages = [...prev, userMessage];
-        console.log("newMessages", newMessages);
-        return newMessages;
-      });
+      setMessages((prev) => [...prev, userMessage]);
 
       // Run the workflow
       await start({
