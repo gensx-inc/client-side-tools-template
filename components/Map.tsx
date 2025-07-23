@@ -9,7 +9,7 @@ import {
 } from "react-leaflet";
 import MarkerClusterGroup from "react-leaflet-markercluster";
 import Image from "next/image";
-import { useRef, useEffect, useMemo } from "react";
+import { useRef, useEffect, useMemo, useState } from "react";
 
 import "leaflet/dist/leaflet.css";
 import "leaflet-defaulticon-compatibility/dist/leaflet-defaulticon-compatibility.css";
@@ -64,7 +64,7 @@ interface MapProps {
   route?: RouteData | null;
 }
 
-const defaultView = {
+const defaultView: MapView = {
   zoom: 12,
   latitude: 37.7749, // San Francisco
   longitude: -122.4194,
@@ -115,60 +115,76 @@ const sanitizeUrl = (url: string): string => {
   return "";
 };
 
-const createMarkerIcon = (color: string = "#3B82F6", photoUrl?: string) => {
+const createMarkerIcon = (
+  color: string = "#3B82F6",
+  photoUrl?: string,
+  isNew: boolean = false,
+  title?: string,
+) => {
   const sanitizedColor = sanitizeColor(color);
+  const animationClass = isNew ? " new-marker" : "";
+  const displayTitle = title ? escapeHtml(title) : "";
 
   if (photoUrl) {
     const sanitizedPhotoUrl = sanitizeUrl(photoUrl);
 
     // Don't create photo marker if URL is invalid
     if (!sanitizedPhotoUrl) {
-      // Fall back to regular marker
+      // Fall back to regular marker with label
       const svgIcon = `
-        <svg width="32" height="32" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
-          <path d="M16 2C11.589 2 8 5.589 8 10c0 7.5 8 18 8 18s8-10.5 8-18c0-4.411-3.589-8-8-8z" fill="${sanitizedColor}" stroke="#ffffff" stroke-width="2"/>
-          <circle cx="16" cy="10" r="3" fill="#ffffff"/>
-        </svg>
+        <div class="marker-with-label">
+          <svg width="32" height="32" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
+            <path d="M16 2C11.589 2 8 5.589 8 10c0 7.5 8 18 8 18s8-10.5 8-18c0-4.411-3.589-8-8-8z" fill="${sanitizedColor}" stroke="#ffffff" stroke-width="2"/>
+            <circle cx="16" cy="10" r="3" fill="#ffffff"/>
+          </svg>
+          ${displayTitle ? `<div class="marker-label">${displayTitle}</div>` : ""}
+        </div>
       `;
 
       return L.divIcon({
         html: svgIcon,
-        className: "custom-marker",
-        iconSize: [32, 32],
-        iconAnchor: [16, 32],
-        popupAnchor: [0, -32],
+        className: `custom-marker${animationClass}`,
+        iconSize: [120, displayTitle ? 55 : 32],
+        iconAnchor: [60, displayTitle ? 55 : 32],
+        popupAnchor: [0, displayTitle ? -55 : -32],
       });
     }
 
     const photoIcon = `
-      <div class="photo-marker">
-        <img src="${escapeHtml(sanitizedPhotoUrl)}" alt="Marker photo" class="marker-photo" style="border-color: ${sanitizedColor};" />
-        <div class="photo-marker-pointer" style="border-top-color: ${sanitizedColor};"></div>
+      <div class="marker-with-label">
+        <div class="photo-marker">
+          <img src="${escapeHtml(sanitizedPhotoUrl)}" alt="Marker photo" class="marker-photo" style="border-color: ${sanitizedColor};" />
+          <div class="photo-marker-pointer" style="border-top-color: ${sanitizedColor};"></div>
+        </div>
+        ${displayTitle ? `<div class="marker-label photo-marker-label">${displayTitle}</div>` : ""}
       </div>
     `;
 
     return L.divIcon({
       html: photoIcon,
-      className: "custom-photo-marker",
-      iconSize: [80, 80],
-      iconAnchor: [40, 70],
-      popupAnchor: [0, -70],
+      className: `custom-photo-marker${animationClass}`,
+      iconSize: [120, displayTitle ? 95 : 80],
+      iconAnchor: [60, displayTitle ? 95 : 70],
+      popupAnchor: [0, displayTitle ? -95 : -70],
     });
   }
 
   const svgIcon = `
-    <svg width="32" height="32" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
-      <path d="M16 2C11.589 2 8 5.589 8 10c0 7.5 8 18 8 18s8-10.5 8-18c0-4.411-3.589-8-8-8z" fill="${sanitizedColor}" stroke="#ffffff" stroke-width="2"/>
-      <circle cx="16" cy="10" r="3" fill="#ffffff"/>
-    </svg>
+    <div class="marker-with-label">
+      <svg width="32" height="32" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
+        <path d="M16 2C11.589 2 8 5.589 8 10c0 7.5 8 18 8 18s8-10.5 8-18c0-4.411-3.589-8-8-8z" fill="${sanitizedColor}" stroke="#ffffff" stroke-width="2"/>
+        <circle cx="16" cy="10" r="3" fill="#ffffff"/>
+      </svg>
+      ${displayTitle ? `<div class="marker-label">${displayTitle}</div>` : ""}
+    </div>
   `;
 
   return L.divIcon({
     html: svgIcon,
-    className: "custom-marker",
-    iconSize: [32, 32],
-    iconAnchor: [16, 32],
-    popupAnchor: [0, -32],
+    className: `custom-marker${animationClass}`,
+    iconSize: [120, displayTitle ? 55 : 32],
+    iconAnchor: [60, displayTitle ? 55 : 32],
+    popupAnchor: [0, displayTitle ? -55 : -32],
   });
 };
 
@@ -207,20 +223,154 @@ const MarkerPopup = ({ marker }: MarkerPopupProps) => {
   );
 };
 
-const Map = (MapProps: MapProps) => {
-  const { ref, markers, view = defaultView, route } = MapProps;
+const MapMarkerComponent = ({
+  marker,
+  isNew,
+  ref,
+  originalPositionRef,
+}: {
+  marker: MapMarker;
+  isNew: boolean;
+  ref: React.RefObject<L.Map | null>;
+  originalPositionRef: React.RefObject<{
+    center: L.LatLng;
+    zoom: number;
+  } | null>;
+}) => {
+  return (
+    <Marker
+      key={marker.id}
+      position={[marker.latitude, marker.longitude]}
+      draggable={false}
+      icon={createMarkerIcon(
+        marker.color,
+        marker.photoUrl,
+        isNew,
+        marker.title,
+      )}
+      eventHandlers={{
+        click: (e) => {
+          if (ref?.current) {
+            originalPositionRef.current = {
+              center: ref.current.getCenter(),
+              zoom: ref.current.getZoom(),
+            };
+          }
+          // Prevent event from bubbling to map
+          e.originalEvent?.stopPropagation();
+        },
+      }}
+    >
+      <Popup
+        closeOnEscapeKey={false}
+        closeOnClick={false}
+        eventHandlers={{
+          remove: () => {
+            if (originalPositionRef.current) {
+              // Capture the original position to avoid race condition
+              const originalPosition = originalPositionRef.current;
+              originalPositionRef.current = null;
+
+              setTimeout(() => {
+                if (ref?.current && originalPosition) {
+                  ref.current.setView(
+                    originalPosition.center,
+                    originalPosition.zoom,
+                  );
+                }
+              }, 100);
+            }
+          },
+        }}
+      >
+        <MarkerPopup marker={marker} />
+      </Popup>
+    </Marker>
+  );
+};
+
+const Map = (props: MapProps) => {
+  const { ref, markers, view = defaultView, route } = props;
   const originalPositionRef = useRef<{ center: L.LatLng; zoom: number } | null>(
     null,
   );
+  const previousMarkersRef = useRef<Set<string>>(new Set());
+  const newMarkersRef = useRef<Set<string>>(new Set());
+  const [lastCenterAndZoom, setLastCenterAndZoom] = useState<{
+    latitude: number;
+    longitude: number;
+    zoom: number;
+  } | null>(null);
 
   useEffect(() => {
-    if (!view || !view.latitude || !view.longitude) {
+    if (!view) {
       return;
     }
-    if (ref?.current) {
-      ref.current.setView([view.latitude, view.longitude], view.zoom);
+    if (!view.fitBounds) {
+      if (
+        lastCenterAndZoom?.latitude !== view.latitude ||
+        lastCenterAndZoom?.longitude !== view.longitude ||
+        lastCenterAndZoom?.zoom !== view.zoom
+      ) {
+        setLastCenterAndZoom({
+          latitude: view.latitude,
+          longitude: view.longitude,
+          zoom: view.zoom,
+        });
+      }
     }
-  }, [view, ref]);
+    if (ref?.current) {
+      // in some hot reload cases, the map will not have the center and zoom set. So we need to set it manually if an error is thrown, then flyToBounds.
+      if (view.fitBounds) {
+        try {
+          ref.current.flyToBounds(view.fitBounds);
+        } catch (error) {
+          if (
+            error instanceof Error &&
+            error.message.includes("Set map center and zoom first.")
+          ) {
+            const { latitude, longitude, zoom } = lastCenterAndZoom ?? {
+              // sf
+              latitude: 37.7749,
+              longitude: -122.4194,
+              zoom: 12,
+            };
+            ref.current.setView([latitude, longitude], zoom);
+            ref.current.flyToBounds(view.fitBounds);
+          }
+        }
+      } else {
+        ref.current.setView([view.latitude, view.longitude], view.zoom);
+      }
+    }
+  }, [view, ref, lastCenterAndZoom]);
+
+  // Track newly added markers
+  useEffect(() => {
+    if (!markers) return;
+
+    const currentMarkerIds = new Set(markers.map((m) => m.id));
+    const previousMarkerIds = previousMarkersRef.current;
+
+    // Find new markers (those in current but not in previous)
+    const newMarkerIds = new Set<string>();
+    for (const id of currentMarkerIds) {
+      if (!previousMarkerIds.has(id)) {
+        newMarkerIds.add(id);
+      }
+    }
+
+    // Update refs
+    newMarkersRef.current = newMarkerIds;
+    previousMarkersRef.current = currentMarkerIds;
+
+    // Clear new marker animations after animation duration
+    if (newMarkerIds.size > 0) {
+      setTimeout(() => {
+        newMarkersRef.current.clear();
+      }, 1400); // Duration of both animations combined
+    }
+  }, [markers]);
 
   // Memoize markers with clustering to prevent flickering during streaming
   const memoizedMarkers = useMemo(() => {
@@ -229,50 +379,16 @@ const Map = (MapProps: MapProps) => {
     return markers.map((item) => {
       // Render single marker
       const marker = item as MapMarker;
-      return (
-        <Marker
-          key={marker.id}
-          position={[marker.latitude, marker.longitude]}
-          draggable={false}
-          icon={createMarkerIcon(marker.color, marker.photoUrl)}
-          eventHandlers={{
-            click: (e) => {
-              if (ref?.current) {
-                originalPositionRef.current = {
-                  center: ref.current.getCenter(),
-                  zoom: ref.current.getZoom(),
-                };
-              }
-              // Prevent event from bubbling to map
-              e.originalEvent?.stopPropagation();
-            },
-          }}
-        >
-          <Popup
-            closeOnEscapeKey={false}
-            closeOnClick={false}
-            eventHandlers={{
-              remove: () => {
-                if (originalPositionRef.current) {
-                  // Capture the original position to avoid race condition
-                  const originalPosition = originalPositionRef.current;
-                  originalPositionRef.current = null;
+      const isNew = newMarkersRef.current.has(marker.id);
 
-                  setTimeout(() => {
-                    if (ref?.current && originalPosition) {
-                      ref.current.setView(
-                        originalPosition.center,
-                        originalPosition.zoom,
-                      );
-                    }
-                  }, 100);
-                }
-              },
-            }}
-          >
-            <MarkerPopup marker={marker} />
-          </Popup>
-        </Marker>
+      return (
+        <MapMarkerComponent
+          key={marker.id}
+          marker={marker}
+          isNew={isNew}
+          ref={ref as React.RefObject<L.Map | null>}
+          originalPositionRef={originalPositionRef}
+        />
       );
     });
   }, [markers, ref]);
@@ -303,87 +419,53 @@ const Map = (MapProps: MapProps) => {
   const routeMarkers = useMemo(() => {
     if (!route) return [];
 
-    const startIcon = createMarkerIcon("#10B981");
-    const endIcon = createMarkerIcon("#EF4444");
-    const waypointIcon = createMarkerIcon("#F59E0B");
-
     const markers = [
-      <Marker
+      <MapMarkerComponent
         key={`${route.id}-start`}
-        position={[route.startLat, route.startLon]}
-        icon={startIcon}
-      >
-        <Popup>
-          <div>
-            <strong>Start</strong>
-            {route.startLabel && (
-              <>
-                <br />
-                <small>{route.startLabel}</small>
-              </>
-            )}
-            <br />
-            {route.distanceText} • {route.durationText}
-            <br />
-            <small>Mode: {route.profile.replace("-", " ")}</small>
-          </div>
-        </Popup>
-      </Marker>,
-      <Marker
+        marker={route.start}
+        isNew={false}
+        ref={ref as React.RefObject<L.Map | null>}
+        originalPositionRef={originalPositionRef}
+      />,
+      <MapMarkerComponent
         key={`${route.id}-end`}
-        position={[route.endLat, route.endLon]}
-        icon={endIcon}
-      >
-        <Popup>
-          <div>
-            <strong>Destination</strong>
-            {route.endLabel && (
-              <>
-                <br />
-                <small>{route.endLabel}</small>
-              </>
-            )}
-            <br />
-            {route.directions.length} turn
-            {route.directions.length !== 1 ? "s" : ""}
-          </div>
-        </Popup>
-      </Marker>,
+        marker={route.end}
+        isNew={false}
+        ref={ref as React.RefObject<L.Map | null>}
+        originalPositionRef={originalPositionRef}
+      />,
     ];
 
     // Add waypoint markers
     if (route.waypoints && route.waypoints.length > 0) {
       route.waypoints.forEach((waypoint, index) => {
         markers.push(
-          <Marker
+          <MapMarkerComponent
             key={`${route.id}-waypoint-${index}`}
-            position={[waypoint.lat, waypoint.lon]}
-            icon={waypointIcon}
-          >
-            <Popup>
-              <div>
-                <strong>Stop {index + 1}</strong>
-                {waypoint.label && (
-                  <>
-                    <br />
-                    <small>{waypoint.label}</small>
-                  </>
-                )}
-              </div>
-            </Popup>
-          </Marker>,
+            marker={{
+              ...waypoint,
+              id: `${route.id}-waypoint-${index}`,
+            }}
+            isNew={false}
+            ref={ref as React.RefObject<L.Map | null>}
+            originalPositionRef={originalPositionRef}
+          />,
         );
       });
     }
 
     return markers;
-  }, [route]);
+  }, [route, ref, originalPositionRef]);
 
   return (
     <MapContainer
-      center={[view.latitude, view.longitude]}
-      zoom={view.zoom}
-      scrollWheelZoom={false}
+      center={
+        view.latitude !== undefined && view.longitude !== undefined
+          ? [view.latitude, view.longitude]
+          : undefined
+      }
+      zoom={view.zoom !== undefined ? view.zoom : undefined}
+      scrollWheelZoom={true}
       style={{ height: "100%", width: "100%" }}
       ref={ref}
     >

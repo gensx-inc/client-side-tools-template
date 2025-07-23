@@ -35,8 +35,11 @@ interface UseChatReturn {
   execution: WorkflowMessage[];
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function useChat(tools?: ToolImplementations<any>): UseChatReturn {
+export function useChat(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  tools?: ToolImplementations<any>,
+  onToolCall?: (toolName: string, args: unknown) => void,
+): UseChatReturn {
   const [messages, setMessages] = useState<Message[]>([]);
   const [status, setStatus] = useState<ChatStatus>("completed");
 
@@ -63,6 +66,17 @@ export function useChat(tools?: ToolImplementations<any>): UseChatReturn {
     if (messagesProgress?.messages && execution?.length > 0) {
       const workflowMessages = messagesProgress.messages as CoreMessage[];
       const lastMessage = workflowMessages[workflowMessages.length - 1];
+
+      // Detect and notify about tool calls
+      if (onToolCall && lastMessage && Array.isArray(lastMessage.content)) {
+        const toolCalls = lastMessage.content.filter(
+          (p): p is ToolCallPart => p.type === "tool-call",
+        );
+
+        toolCalls.forEach((toolCall) => {
+          onToolCall(toolCall.toolName, toolCall.args);
+        });
+      }
 
       if (status === "waiting" || status === "reasoning") {
         if (lastMessage && Array.isArray(lastMessage.content)) {
@@ -92,6 +106,10 @@ export function useChat(tools?: ToolImplementations<any>): UseChatReturn {
       }
 
       setMessages((prev) => {
+        console.log("setMessages, workflowMessages", {
+          prev,
+          workflowMessages,
+        });
         // Find the last user message to determine where to insert workflow messages
         const lastUserIndex = prev.findLastIndex((msg) => msg.role === "user");
         if (lastUserIndex === -1) return prev;
@@ -101,15 +119,17 @@ export function useChat(tools?: ToolImplementations<any>): UseChatReturn {
         return [...messagesBeforeAssistant, ...workflowMessages];
       });
     }
-  }, [messagesProgress, execution, status]);
+  }, [messagesProgress, execution, status, onToolCall]);
 
   const clear = useCallback(() => {
+    console.log("clear");
     setMessages([]);
     setStatus("completed");
   }, []);
 
   const loadHistory = useCallback(async (threadId: string, userId: string) => {
     if (!threadId || !userId) return;
+    console.log("loadHistory", { threadId, userId });
 
     try {
       const history = await getChatHistory(userId, threadId);
@@ -130,7 +150,11 @@ export function useChat(tools?: ToolImplementations<any>): UseChatReturn {
         role: "user",
         content: prompt,
       };
-      setMessages((prev) => [...prev, userMessage]);
+      setMessages((prev) => {
+        const newMessages = [...prev, userMessage];
+        console.log("newMessages", newMessages);
+        return newMessages;
+      });
 
       // Run the workflow
       await start({
