@@ -162,7 +162,7 @@ export function CombinedFloatingPanel({
   });
 
   const renderChatTab = () => (
-    <div className="relative z-[2] max-h-96 overflow-y-auto">
+    <div className="relative z-[2] flex-1 overflow-y-auto">
       {visibleMessages.length === 0 ? (
         <div className="p-6 text-center">
           <div className="text-sm text-slate-600">
@@ -208,11 +208,30 @@ export function CombinedFloatingPanel({
       );
     }
 
+    // Helper function to get distance for a specific step from alternative routes
+    const getStepDistances = (stepIndex: number) => {
+      const currentStep = route.directions[stepIndex];
+      const distances = {
+        driving: currentStep.distance,
+        walking: null as number | null,
+      };
+
+      // Find walking route alternative
+      const walkingRoute = route.alternativeRoutes?.find(
+        (r) => r.profile === "walking",
+      );
+      if (walkingRoute && walkingRoute.directions[stepIndex]) {
+        distances.walking = walkingRoute.directions[stepIndex].distance;
+      }
+
+      return distances;
+    };
+
     return (
-      <div className="relative z-[2] max-h-96 overflow-y-auto">
-        {/* Route Summary */}
+      <div className="relative z-[2] flex-1 overflow-y-auto">
+        {/* Route Summary - Primary Route */}
         <div className="p-4 border-b border-white/20 bg-white/10">
-          <div className="flex justify-between items-center">
+          <div className="flex justify-between items-center mb-2">
             <div className="text-lg font-bold text-slate-900">
               {route.distanceText}
             </div>
@@ -220,40 +239,98 @@ export function CombinedFloatingPanel({
               {route.durationText}
             </div>
           </div>
+          <div className="text-sm text-slate-600">
+            {formatTransportMode(route.profile)} (Primary)
+          </div>
         </div>
+
+        {/* Alternative Routes Summary */}
+        {route.alternativeRoutes && route.alternativeRoutes.length > 0 && (
+          <div className="p-4 border-b border-white/20 bg-white/5">
+            <div className="text-sm font-semibold text-slate-700 mb-2">
+              Alternative Routes:
+            </div>
+            {route.alternativeRoutes.map((altRoute, index) => (
+              <div
+                key={index}
+                className="flex justify-between items-center py-1"
+              >
+                <div className="text-sm text-slate-600">
+                  {formatTransportMode(altRoute.profile)}
+                </div>
+                <div className="text-sm text-slate-700">
+                  {altRoute.distanceText} • {altRoute.durationText}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
 
         {/* Directions List */}
         <div className="overflow-y-auto">
-          {route.directions.map((direction, index) => (
-            <div
-              key={index}
-              className="flex items-start gap-3 p-3 border-b border-white/10 last:border-b-0 hover:bg-white/10"
-            >
-              <div className="text-lg mt-1 flex-shrink-0">
-                {getInstructionIcon(direction.type || 0)}
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm text-slate-900 leading-relaxed">
-                  {direction.instruction}
-                </p>
-                {direction.name && (
-                  <p className="text-xs text-slate-600 mt-1">
-                    on {direction.name}
+          {route.directions.map((direction, index) => {
+            const stepNumber = index + 1;
+            const distances = getStepDistances(index);
+
+            return (
+              <div
+                key={index}
+                className="flex items-start gap-3 p-3 border-b border-white/10 last:border-b-0 hover:bg-white/10"
+              >
+                {/* Step Number */}
+                <div className="flex-shrink-0 w-6 h-6 bg-blue-500 text-white text-xs font-bold rounded-full flex items-center justify-center mt-1">
+                  {stepNumber}
+                </div>
+
+                {/* Direction Icon */}
+                <div className="text-lg mt-1 flex-shrink-0">
+                  {getInstructionIcon(direction.type || 0)}
+                </div>
+
+                {/* Direction Content */}
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm text-slate-900 leading-relaxed">
+                    {direction.instruction}
                   </p>
-                )}
-                <div className="flex items-center gap-2 mt-1">
-                  <span className="text-xs text-slate-500">
-                    {formatDistance(direction.distance)}
-                  </span>
-                  {direction.duration > 0 && (
-                    <span className="text-xs text-slate-500">
-                      • {Math.round(direction.duration / 60)}min
-                    </span>
+                  {direction.name && (
+                    <p className="text-xs text-slate-600 mt-1">
+                      on {direction.name}
+                    </p>
                   )}
+
+                  {/* Distance Information */}
+                  <div className="flex flex-col gap-1 mt-2">
+                    {/* Driving Distance */}
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-blue-600 font-medium">
+                        🚗 Driving:
+                      </span>
+                      <span className="text-xs text-slate-600">
+                        {formatDistance(distances.driving)}
+                      </span>
+                      {direction.duration > 0 && (
+                        <span className="text-xs text-slate-500">
+                          • {Math.round(direction.duration / 60)}min
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Walking Distance */}
+                    {distances.walking !== null && (
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-green-600 font-medium">
+                          🚶 Walking:
+                        </span>
+                        <span className="text-xs text-slate-600">
+                          {formatDistance(distances.walking)}
+                        </span>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
     );
@@ -262,10 +339,10 @@ export function CombinedFloatingPanel({
   return (
     <>
       {/* Desktop Layout */}
-      <div className="hidden md:block fixed top-6 right-6 z-[9995] w-80 max-h-[calc(100vh-12rem)]">
+      <div className="hidden md:block fixed top-6 right-6 z-[9995] w-80 h-[calc(100vh-3rem)]">
         {/* Glass morphism container */}
-        <div className="relative rounded-3xl overflow-hidden shadow-[0_8px_8px_rgba(0,0,0,0.25),0_0_25px_rgba(0,0,0,0.15)] transition-all duration-400 ease-out backdrop-blur-[6px] bg-white/25 border border-white/40">
-          <div className="absolute inset-0 z-[1] overflow-hidden rounded-3xl shadow-[inset_2px_2px_3px_0_rgba(255,255,255,0.6),inset_-2px_-2px_3px_1px_rgba(255,255,255,0.3),inset_0_0_0_1px_rgba(255,255,255,0.2)]" />
+        <div className="relative rounded-2xl overflow-hidden shadow-[0_8px_8px_rgba(0,0,0,0.25),0_0_25px_rgba(0,0,0,0.15)] transition-all duration-400 ease-out backdrop-blur-[6px] bg-white/60 border border-white/70 h-full flex flex-col">
+          <div className="absolute inset-0 z-[1] overflow-hidden rounded-2xl shadow-[inset_2px_2px_3px_0_rgba(255,255,255,0.6),inset_-2px_-2px_3px_1px_rgba(255,255,255,0.3),inset_0_0_0_1px_rgba(255,255,255,0.2)]" />
 
           {/* Header */}
           <div className="relative z-[2] p-4 border-b border-white/20">
@@ -351,9 +428,9 @@ export function CombinedFloatingPanel({
       </div>
 
       {/* Mobile Layout */}
-      <div className="md:hidden fixed inset-x-0 top-[60px] bottom-[100px] z-[9995] mx-4">
+      <div className="md:hidden fixed inset-x-0 top-[10vh] bottom-[10vh] z-[9995] mx-4">
         {/* Mobile container with glass morphism */}
-        <div className="relative rounded-2xl shadow-[0_8px_8px_rgba(0,0,0,0.25),0_0_25px_rgba(0,0,0,0.15)] transition-all duration-400 ease-out backdrop-blur-[6px] bg-white/25 border border-white/40 h-full flex flex-col">
+        <div className="relative rounded-2xl shadow-[0_8px_8px_rgba(0,0,0,0.25),0_0_25px_rgba(0,0,0,0.15)] transition-all duration-400 ease-out backdrop-blur-[6px] bg-white/60 border border-white/70 h-full flex flex-col">
           {/* Glass morphism effects */}
           <div className="absolute inset-0 z-[1] rounded-2xl shadow-[inset_2px_2px_3px_0_rgba(255,255,255,0.6),inset_-2px_-2px_3px_1px_rgba(255,255,255,0.3),inset_0_0_0_1px_rgba(255,255,255,0.2)] pointer-events-none" />
           {/* Header */}
@@ -482,9 +559,9 @@ export function CombinedFloatingPanel({
                   </div>
                 ) : (
                   <>
-                    {/* Route Summary */}
+                    {/* Route Summary - Primary Route */}
                     <div className="flex-shrink-0 p-4 border-b border-white/10 bg-white/10">
-                      <div className="flex justify-between items-center">
+                      <div className="flex justify-between items-center mb-2">
                         <div className="text-lg font-bold text-slate-900">
                           {route.distanceText}
                         </div>
@@ -492,43 +569,125 @@ export function CombinedFloatingPanel({
                           {route.durationText}
                         </div>
                       </div>
+                      <div className="text-sm text-slate-600">
+                        {formatTransportMode(route.profile)} (Primary)
+                      </div>
                     </div>
+
+                    {/* Alternative Routes Summary */}
+                    {route.alternativeRoutes &&
+                      route.alternativeRoutes.length > 0 && (
+                        <div className="flex-shrink-0 p-4 border-b border-white/10 bg-white/5">
+                          <div className="text-sm font-semibold text-slate-700 mb-2">
+                            Alternative Routes:
+                          </div>
+                          {route.alternativeRoutes.map((altRoute, index) => (
+                            <div
+                              key={index}
+                              className="flex justify-between items-center py-1"
+                            >
+                              <div className="text-sm text-slate-600">
+                                {formatTransportMode(altRoute.profile)}
+                              </div>
+                              <div className="text-sm text-slate-700">
+                                {altRoute.distanceText} •{" "}
+                                {altRoute.durationText}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
 
                     {/* Directions List - Scrollable */}
                     <div
                       className="flex-1 overflow-y-scroll touch-pan-y"
                       style={{ WebkitOverflowScrolling: "touch" }}
                     >
-                      {route.directions.map((direction, index) => (
-                        <div
-                          key={index}
-                          className="flex items-start gap-3 p-4 border-b border-white/10 last:border-b-0 hover:bg-white/10"
-                        >
-                          <div className="text-lg mt-1 flex-shrink-0">
-                            {getInstructionIcon(direction.type || 0)}
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm text-slate-900 leading-relaxed">
-                              {direction.instruction}
-                            </p>
-                            {direction.name && (
-                              <p className="text-xs text-slate-600 mt-1">
-                                on {direction.name}
+                      {route.directions.map((direction, index) => {
+                        const stepNumber = index + 1;
+                        // Helper function for mobile section
+                        const getStepDistances = (stepIndex: number) => {
+                          const currentStep = route.directions[stepIndex];
+                          const distances = {
+                            driving: currentStep.distance,
+                            walking: null as number | null,
+                          };
+
+                          // Find walking route alternative
+                          const walkingRoute = route.alternativeRoutes?.find(
+                            (r) => r.profile === "walking",
+                          );
+                          if (
+                            walkingRoute &&
+                            walkingRoute.directions[stepIndex]
+                          ) {
+                            distances.walking =
+                              walkingRoute.directions[stepIndex].distance;
+                          }
+
+                          return distances;
+                        };
+                        const distances = getStepDistances(index);
+
+                        return (
+                          <div
+                            key={index}
+                            className="flex items-start gap-3 p-4 border-b border-white/10 last:border-b-0 hover:bg-white/10"
+                          >
+                            {/* Step Number */}
+                            <div className="flex-shrink-0 w-6 h-6 bg-blue-500 text-white text-xs font-bold rounded-full flex items-center justify-center mt-1">
+                              {stepNumber}
+                            </div>
+
+                            {/* Direction Icon */}
+                            <div className="text-lg mt-1 flex-shrink-0">
+                              {getInstructionIcon(direction.type || 0)}
+                            </div>
+
+                            {/* Direction Content */}
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm text-slate-900 leading-relaxed">
+                                {direction.instruction}
                               </p>
-                            )}
-                            <div className="flex items-center gap-2 mt-1">
-                              <span className="text-xs text-slate-500">
-                                {formatDistance(direction.distance)}
-                              </span>
-                              {direction.duration > 0 && (
-                                <span className="text-xs text-slate-500">
-                                  • {Math.round(direction.duration / 60)}min
-                                </span>
+                              {direction.name && (
+                                <p className="text-xs text-slate-600 mt-1">
+                                  on {direction.name}
+                                </p>
                               )}
+
+                              {/* Distance Information */}
+                              <div className="flex flex-col gap-1 mt-2">
+                                {/* Driving Distance */}
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs text-blue-600 font-medium">
+                                    🚗 Driving:
+                                  </span>
+                                  <span className="text-xs text-slate-600">
+                                    {formatDistance(distances.driving)}
+                                  </span>
+                                  {direction.duration > 0 && (
+                                    <span className="text-xs text-slate-500">
+                                      • {Math.round(direction.duration / 60)}min
+                                    </span>
+                                  )}
+                                </div>
+
+                                {/* Walking Distance */}
+                                {distances.walking !== null && (
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-xs text-green-600 font-medium">
+                                      🚶 Walking:
+                                    </span>
+                                    <span className="text-xs text-slate-600">
+                                      {formatDistance(distances.walking)}
+                                    </span>
+                                  </div>
+                                )}
+                              </div>
                             </div>
                           </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   </>
                 )}

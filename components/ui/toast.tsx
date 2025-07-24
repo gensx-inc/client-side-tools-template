@@ -34,15 +34,15 @@ function CustomToast({
   };
 
   return (
-    <div className="relative rounded-2xl overflow-hidden shadow-[0_8px_8px_rgba(0,0,0,0.25),0_0_25px_rgba(0,0,0,0.15)] transition-all duration-300 animate-in slide-in-from-bottom-2 backdrop-blur-[6px] bg-white/25 border border-white/40">
+    <div className="relative rounded-2xl overflow-hidden shadow-[0_8px_8px_rgba(0,0,0,0.25),0_0_25px_rgba(0,0,0,0.15)] transition-all duration-300 animate-in slide-in-from-bottom-2 backdrop-blur-[6px] bg-white/50 border border-white/70">
       <div className="absolute inset-0 z-[1] overflow-hidden rounded-2xl shadow-[inset_2px_2px_3px_0_rgba(255,255,255,0.6),inset_-2px_-2px_3px_1px_rgba(255,255,255,0.3),inset_0_0_0_1px_rgba(255,255,255,0.2)]" />
       <div className="relative z-[2] p-4">
         <div className="flex items-start gap-3">
           {getIcon()}
           <div className="flex-1 min-w-0">
-            <div className="text-sm font-medium text-slate-900">{title}</div>
+            <div className="text-xs font-medium text-slate-900">{title}</div>
             {description && (
-              <div className="text-sm text-slate-600 mt-1">{description}</div>
+              <div className="text-xs text-slate-600 mt-1">{description}</div>
             )}
           </div>
           <button
@@ -68,6 +68,17 @@ export const addToast = (data: ToastData) => {
   return toastId;
 };
 
+// Update an existing toast
+export const updateToast = (toastId: string | number, data: ToastData) => {
+  toast.custom(
+    (t) => <CustomToast {...data} onClose={() => toast.dismiss(t)} />,
+    {
+      id: toastId,
+      duration: data.autoHide === false ? Infinity : 4000,
+    },
+  );
+};
+
 // Clear all toasts
 export const clearAllToasts = () => {
   toast.dismiss();
@@ -79,12 +90,12 @@ export function ToastContainer() {
 
   return (
     <div
-      className="fixed bottom-2 right-6 z-[9997]"
+      className="fixed bottom-24 left-1/2 transform -translate-x-1/2 z-[9998]"
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
       <Toaster
-        position="bottom-right"
+        position="bottom-center"
         offset="0px" // We're handling positioning with the wrapper div
         visibleToasts={isHovered ? 15 : 3} // Show 3 normally, 15 on hover
         toastOptions={{
