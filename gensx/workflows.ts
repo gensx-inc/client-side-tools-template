@@ -1,14 +1,13 @@
 import * as gensx from "@gensx/core";
 import { Agent } from "./agent";
-import { CoreMessage } from "ai";
+import { ModelMessage } from "ai";
 import { webSearchTool } from "./tools/web-search";
 import { useBlob } from "@gensx/storage";
-import { asToolSet } from "@gensx/vercel-ai";
+import { asToolSet, generateText } from "@gensx/vercel-ai";
 import { toolbox } from "./tools/toolbox";
 import { geocodeTool } from "./tools/geocode";
-import { generateText } from "ai";
 import { reverseGeocodeTool } from "./tools/reverse-geocode";
-import { createOpenAI } from "@ai-sdk/openai";
+import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { locationSearchTool } from "./tools/location-search";
 import {
   findBoundingBoxTool,
@@ -28,7 +27,7 @@ interface ChatAgentProps {
 
 interface ThreadData {
   summary?: string;
-  messages: CoreMessage[];
+  messages: ModelMessage[];
 }
 
 export const ChatAgent = gensx.Workflow(
@@ -65,7 +64,7 @@ export const ChatAgent = gensx.Workflow(
       const isNewThread = existingMessages.length === 0;
 
       if (isNewThread) {
-        const systemMessage: CoreMessage = {
+        const systemMessage: ModelMessage = {
           role: "system",
           content: `You are a helpful geographic assistant that can interact with an interactive map. You have access to several map tools:
 
@@ -163,7 +162,7 @@ Always be proactive about using the map tools to enhance the user's experience. 
       }
 
       // Add the new user message
-      const messages: CoreMessage[] = [
+      const messages: ModelMessage[] = [
         ...existingMessages,
         {
           role: "user",
@@ -191,7 +190,8 @@ Always be proactive about using the map tools to enhance the user's experience. 
         ...asToolSet(toolbox),
       };
 
-      const groqClient = createOpenAI({
+      const groqClient = createOpenAICompatible({
+        name: "groq",
         apiKey: process.env.GROQ_API_KEY!,
         baseURL: "https://api.groq.com/openai/v1",
       });
@@ -201,13 +201,6 @@ Always be proactive about using the map tools to enhance the user's experience. 
         messages,
         tools,
         model,
-        // providerOptions: thinking
-        //   ? {
-        //       anthropic: {
-        //         thinking: { type: "enabled", budgetTokens: 12000 },
-        //       } satisfies AnthropicProviderOptions,
-        //     }
-        //   : undefined,
       });
 
       const summary = await summaryPromise;
@@ -233,11 +226,16 @@ const GenerateSummary = gensx.Component(
   "GenerateSummary",
   async ({ userMessage }: { userMessage: string }): Promise<string> => {
     try {
+      const groqClient = createOpenAICompatible({
+        name: "groq",
+        apiKey: process.env.GROQ_API_KEY!,
+        baseURL: "https://api.groq.com/openai/v1",
+      });
+
+      const model = groqClient("moonshotai/kimi-k2-instruct");
+
       const result = await generateText({
-        model: createOpenAI({
-          apiKey: process.env.GROQ_API_KEY!,
-          baseURL: "https://api.groq.com/openai/v1",
-        })("moonshotai/kimi-k2-instruct"),
+        model,
         prompt: `Please create a concise 3-5 word summary of this user question/request. Focus on the main topic or intent. Examples:
 - "Tell me about Paris" → Paris Information
 - "Find restaurants near me" → Local Restaurant Search
@@ -247,7 +245,7 @@ const GenerateSummary = gensx.Component(
 User message: "${userMessage}"
 
 Summary:`,
-        maxTokens: 50,
+        maxOutputTokens: 50,
       });
 
       // Remove quotes and trim whitespace
